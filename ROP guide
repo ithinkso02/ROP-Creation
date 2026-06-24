@@ -1,13 +1,43 @@
-# HOW TO USE CMP_BEQ 🐧 
-```er2 = Địa chỉ của giá trị muốn so sánh
-er0 = [er2],r2 = 9,rt (Đưa giá trị từ er2 về er0)
-er2 = Giá trị muốn so sánh với er0
-er0 - er2_eq,r0 = 1,rt (So sánh er0 với er2, nếu er0 ≠ er2 thì r0 = 0,er0 = er2 thì r0 = 1)
-r1 = 0,rt (Đưa r1 về 0)
-er4 = Địa chỉ program chạy khi er0 ≠ er2
-er2 = Độ dài của program chạy khi er0 ≠ er2
-er0*=er2,er2=er0,er0+=er4
-(Nếu r0 = 0 thì chạy program khi er0 ≠ er2 do 0*r2 [r2=length] = 0,er4+er0 = Địa chỉ program chạy khi er0 ≠ er2 + 0 = Địa chỉ program chạy khi er0 ≠ er2,Nếu r0 = 1 thì sẽ chạy địa chỉ program chạy khi er0 ≠ er2 + độ dài được lưu trong er4)
-er14 = er0,pop xr0 (Lưu địa chỉ đã setup ở er0 sang er14)
-0x30303030
-sp = er14,pop er14```
+BASIC ROP
+BÀI HỌC ĐẦU TIÊN: Phương pháp CPY
+StringCPY: C8 03 32 30
+Syntax:
+34 7B 31 30 [Addr muốn copy sang][Addr gốc] C8 03 32 30
+Copy từ Addr gốc sang addr muốn copy cho đến khi gặp null byte (tức là byte 00)
+
+Memcpy: 50 94 30 30,32 89 31 30
+Syntax:
+34 7B 31 30 [Addr muốn copy sang][Addr gốc] 50 94 30 30 [Độ dài muốn copy <2 byte> ]
+DA 7B 31 30 [Độ dài muốn copy <2 byte> ][Addr gốc][Addr muốn copy sang] 30 30 32 89 31 30 30 30
+Copy từ Addr gốc sang addr muốn copy với độ dài mong muốn
+
+Ví dụ: Program dài 100 byte thì quy ra hex sẽ là 64,nhập độ dài sẽ là 64 00
+* Có nhiều Memcpy nhưng 2 cái này tiêu biểu nhất nên lấy vào
+
+BÀI TIẾP THEO: Phương pháp loop program
+Loop với StringCPY và 2 vùng địa chỉ (Inject program vào vùng addr chính)
+
+34 7B 31 30 [Vùng addr backup <Copy lên vùng addr chính khi vùng addr chính bị phá do set sp (Giải thích sau)>][Vùng addr chính (TỪ PROGRAM TRỞ ĐI) ] C8 03 32 30 A8 9F 30 30 (Setlr để loop ổn định)
+
+[Program <Không được có null byte> ]
+
+34 7B 31 30 [Vùng addr chính][Vùng addr backup] C8 03 32 30 78 5C 31 30 [Vùng addr chính -2] 60 0D 32 30 (set sp nè) 00
+
+* Set sp: Hiểu nôm na là launcher gián tiếp đi
+
+Launcher cho program:
+78 5C 31 30 [Vùng addr chính -2] 60 0D 32 30
+• Ưu điểm : Đơn giản
+• Nhược điểm : Program không được chứa null byte, không thể skip
+
+Loop với StringCPY và 3 vùng địa chỉ (Inject program vào vùng addr Backup 2)
+
+34 7B 31 30 [Vùng addr backup] [Vùng addr chính] C8 03 32 30 A8 9F 30 30
+[Program <Không được có null byte> ]
+34 7B 31 30 [Vùng addr chính] [Vùng addr backup] C8 03 32 30 78 5C 31 30 [Vùng addr chính -2] 60 0D 32 30 00
+
+Launcher cho program:
+34 7B 31 30 [Vùng addr chính] [Vùng addr backup 2] C8 03 32 30 78 5C 31 30 [Vùng addr chính -2] 60 0D 32 30
+
+• Ưu điểm : Đơn giản, có thể skip
+• Nhược điểm : Program vẫn không được chứa null byte
