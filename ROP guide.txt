@@ -5,7 +5,7 @@ Syntax:
 34 7B 31 30 [Addr muốn copy sang][Addr gốc] C8 03 32 30
 Copy từ Addr gốc sang addr muốn copy cho đến khi gặp null byte (tức là byte 00)
 
-Memcpy: 50 94 30 30,32 89 31 30
+Memcpy: 50 94 30 30, 32 89 31 30
 Syntax:
 34 7B 31 30 [Addr muốn copy sang][Addr gốc] 50 94 30 30 [Độ dài muốn copy <2 byte> ]
 DA 7B 31 30 [Độ dài muốn copy <2 byte> ][Addr gốc][Addr muốn copy sang] 30 30 32 89 31 30 30 30
@@ -14,14 +14,16 @@ Copy từ Addr gốc sang addr muốn copy với độ dài mong muốn
 Ví dụ: Program dài 100 byte thì quy ra hex sẽ là 64,nhập độ dài sẽ là 64 00
 * Có nhiều Memcpy nhưng 2 cái này tiêu biểu nhất nên lấy vào
 
+========================================================================================================================================
+
 BÀI TIẾP THEO: Phương pháp loop program
 Loop với StringCPY và 2 vùng địa chỉ (Inject program vào vùng addr chính)
 
-34 7B 31 30 [Vùng addr backup <Copy lên vùng addr chính khi vùng addr chính bị phá do set sp (Giải thích sau)>][Vùng addr chính (TỪ PROGRAM TRỞ ĐI) ] C8 03 32 30 A8 9F 30 30 (Setlr để loop ổn định)
+34 7B 31 30 [Vùng addr backup <Copy lên vùng addr chính khi vùng addr chính bị phá do set sp (Giải thích sau)>] [Vùng addr chính (TỪ PROGRAM TRỞ ĐI) ] C8 03 32 30 A8 9F 30 30 (Setlr để loop ổn định)
 
 [Program <Không được có null byte> ]
 
-34 7B 31 30 [Vùng addr chính][Vùng addr backup] C8 03 32 30 78 5C 31 30 [Vùng addr chính -2] 60 0D 32 30 (set sp nè) 00
+34 7B 31 30 [Vùng addr chính] [Vùng addr backup] C8 03 32 30 78 5C 31 30 [Vùng addr chính -2] 60 0D 32 30 (set sp nè) 00
 
 * Set sp: Hiểu nôm na là launcher gián tiếp đi
 
@@ -41,3 +43,960 @@ Launcher cho program:
 
 • Ưu điểm : Đơn giản, có thể skip
 • Nhược điểm : Program vẫn không được chứa null byte
+
+========================================================================================================================================
+
+Loop với StringCPY kết hợp với Memcpy ở input area (D180)
+[Program]
+34 7B 31 30 30 D6 B0 D1 C8 03 32 30 78 5C 31 30 2E D6 60 0D 32 30
+Launcher cho program (Bắt buộc vào 124 an)
+DA 7B 31 30 [Độ dài program] [Vùng addr backup 2 <Thường là E9E0>] [Vùng addr chính] [Vùng addr chính -2] 32 89 31 30 30 30 74 1F 32 30
+
+Giải thích đơn giản : Trong program khi đến đoạn loop, nó sẽ lấy cái vùng input area để set sp (Tất nhiên trước đấy phải lưu vùng nào đó như D630 chẳng hạn và lấy vùng input area làm vùng addr backup, set sp ở D630 luôn) và sẽ chạy qua đoạn Memcpy trong launcher giúp lưu data ở các vùng addr,đồng thời set sp ở vùng addr chính luôn
+
+• Ưu điểm : Ngắn, phần loop trong program thường cố định giá trị sẵn và không sợ null byte
+• Nhược điểm : Không có đâu
+
+========================================================================================================================================
+
+Các vùng địa chỉ
+
+E9E0: Vùng an toàn, không bị reset trừ khi dùng ngoặc hoặc các byte có chứa ô trống trong Math I/O [Thường làm vùng addr chính <Với 2 vùng addr> hoặc vùng addr backup 2 <Với 3 vùng addr>]
+
+D600: Vùng ổn định, chỉ bị reset khi reset máy hoặc chuyển mode [Thường là vùng addr backup]
+
+E3D4: Vùng không ổn định, không thể inject trực tiếp vì thường bị phá liên tục do những màn hình không trỏ [Thường là vùng addr backup <Với 2 vùng địa chỉ> hoặc vùng addr chính <Với 3 vùng địa chỉ>].
+
+========================================================================================================================================
+
+Cách tăng giảm giá trị vào một địa chỉ bất kì
+Những gadget cần sử dụng:
+
+A0 9C 30 30: L ER10, [ER8] ; ADD ER2, ER10 ; ST ER2, [ER8] ; POP XR8
+74 89 31 30: POP ER2
+A6 A8 30 30: POP ER8
+
+Công thức:
+74 89 31 30 [Value muốn tăng <Tăng là từ 01 00 đi lên, giảm là từ FF FF đi xuống>] A6 A8 30 30 [Địa chỉ muốn tăng giảm giá trị] A0 9C 30 30 30 30 30 30
+
+Nếu muốn nó tăng liên tục thì loop lại là xong.
+
+========================================================================================================================================
+
+Cách dùng delay
+Những gadget cần sử dụng:
+
+02 26 31 30: POP ER0
+3C 9F 30 30: Delay
+
+Tổng quát: Giá trị delay ở ER0
+
+POP ER0
+[Value] - tức là r0 và r1
+
+Delay
+
+Dạng hex: 02 26 31 30 [Delay value] 3C 9F 30 30
+Delay value càng cao thì độ trễ để đến func tiếp theo của program càng cao
+
+8000 tick ≈ 1 second
+
+========================================================================================================================================
+
+Cách dùng num_add
+Sài num_fromdigit hoặc num_frombyte để biến nó thành num sau đó dùng num_add([er0]+=[er2]) rồi dùng num_outputprint hoặc num_to_str
+
+========================================================================================================================================
+
+RAM DUMP WITH SWEEPEDGE METHOD ON CWX VERSION
+
+0xD730:Program address
+0xE9E0:Backup address
+0xD184:Launcher address
+Data:
+
+org 0xD730
+setlr
+di,rt
+pop xr0
+    31 F0 15 00 :er0 = [F031] is screen mode,r2 = 15 is value,r3 = 30 is byte pad
+    [er0]=r2
+pop er0
+    30 30:r0,r1
+    memzero,pop er0
+    00 00 :er0 = length
+(I don't know why we need memzero to make render_bitmap work normally)
+pop xr0
+    00 00 BF 40 :r0,r1,r2,r3=x location ,y location ,x size ,y size
+    render_bitmap,pop er0
+    00 00 : er0 = *address of bitmap 
+    render.ddd4
+pop er2
+    FF FF :er2 is value
+pop er8
+    39 F0 :er8 = [F039] is yoffset of screen
+    [er8]+=er2,pop xr8
+    30 30 30 30 : xr8 = byte pad
+pop er2
+    18 00 :er2 is value
+pop er8
+    0C EA :er8 = [EA0C] is address of * in program
+    [er8]+=er2,pop xr8
+    30 30 30 30 : xr8 = byte pad
+pop qr0
+     30 D6 84 D1 30 30 2E D6 : r0,r1,r2,r3,r4,r5,r6,r7
+     smart_strcpy
+     sp = er6,pop er8
+:Copy from [D184] to [D630] then set sp at [D62E]
+
+Launcher:
+
+0xD180:
+FD 24 30 30 :non-an function
+
+0xD184:
+pop xr0
+    30 D7 E0 E9 : er0 = [D730] is program address, er2 = [E9E0] is backup address
+    BL_Memcpy,pop er0
+    01 01 : er0 = length
+pop er14
+    2E D7 : er14 = [D72E] is program address -2
+    sp = er14,pop er14
+
+Program as hex: (For fx-580 VNX version)
+
+A8 9F 30 30 5C A0 30 30 34 7B 31 30 31 F0 15 30
+D2 03 32 30 02 26 31 30 00 00 38 9D 30 30 00 01
+34 7B 31 30 00 00 BF 40 46 98 30 30 00 00 7E 94
+30 30 74 89 31 30 FF FF A6 A8 30 30 39 F0 A0 9C
+30 30 30 30 30 30 74 89 31 30 18 00 A6 A8 30 30
+0C EA A0 9C 30 30 30 30 30 30 DA 7B 31 30 30 D6
+84 D1 30 30 2E D6 C8 03 32 30 74 1F 32 30
+
+Launcher as hex:
+
+FD 24 30 30 34 7B 31 30 30 D7 E0 E9 50 94 30 30
+01 01 78 5C 31 30 2E D7 60 0D 32 30
+
+========================================================================================================================================
+
+Loop với Memcpy
+
+Trong program:
+[Program] 34 7B 31 30 30 D6 84 D1 C8 03 32 30 78 5C 31 30 2E D6 60 0D 32 30
+
+Asm form:
+xr0 = 0xd184d630
+BL strcpy
+er14 = 0xd62e
+sp = er14, pop er14
+
+Launcher (Non-an)
+FD 24 30 30 A8 9F 30 30 E0 A0 30 30 DA 7B 31 30 <Độ dài program (2 byte)> <Địa chỉ Backup (E9E0)><Địa chỉ program (D730 or E3D4 tuỳ)><Địa chỉ program -2> 32 89 31 30 30 30 74 1F 32 30
+
+Ưu điểm : Có thể có null byte (00), tốt hơn loop Strcpy
+
+========================================================================================================================================
+
+GETSCANCODE COMPILER GUIDE
+
+org 0xd730
+ 0x0000
+_$cursor_no_flash:
+  xr0 = 0x0001d113
+  [er0]=r2
+_$key_1:
+  er0 = 0xd730
+  getscancode
+  setlr
+  er2 = 0xd730 
+  er0 = [er2],r2 = 9,rt
+  er2 = 0x0101
+  er0 - er2_eq,r0 = 1,rt
+  0x3032ac30
+  er4 = adr_of [-2] _$key_2
+  er2 = 0x0038
+  er0*=r2,er2 = er0,er0+=er4,rt
+  er14 = er0,pop xr0
+  0x30303030
+  sp = er14,pop er14
+_$key_2:
+  setlr
+  er2 = 0xd730 
+  er0 = [er2],r2 = 9,rt
+  er2 = 0x0201
+  er0 - er2_eq,r0 = 1,rt
+  0x3032ac30
+  er4 = adr_of [-2] _$key_3
+  er2 = 0x0038
+  er0*=r2,er2 = er0,er0+=er4,rt
+  er14 = er0,pop xr0
+  0x30303030
+  sp = er14,pop er14
+_$key_1_func:
+  xr0 = 0x210e, adr_of _$text1
+  smallprint
+  render.ddd4
+  er14 = adr_of [-2] _$restore
+  sp = er14,pop er14
+_$key_3:
+setlr
+  er2 = 0xd730 
+  er0 = [er2],r2 = 9,rt
+  er2 = 0x0401
+  er0 - er2_eq,r0 = 1,rt
+  0x3032ac30
+  er4 = adr_of [-2] _$other_key
+  er2 = 0x000a
+  er0*=r2,er2 = er0,er0+=er4,rt
+  er14 = er0,pop xr0
+  0x30303030
+  sp = er14,pop er14
+_$key_2_func:
+  xr0 = 0x210e, adr_of _$text2
+  smallprint
+  render.ddd4
+  er14 = adr_of [-2] _$restore
+  sp = er14,pop er14
+_$other_key:
+  er14 = adr_of [-2] _$restore
+  sp = er14,pop er14
+_$key_3_func:
+  xr0 = 0x210e, adr_of _$text3
+  smallprint
+  render.ddd4
+_$restore:
+  xr0 = 0xd184d630
+  BL strcpy
+  er14 = 0xd62e
+  sp = er14,pop er14
+_$text1:
+  str "aaaaaaaaaaaaaaaaa"
+  0x00
+_$text2:
+  str "bbbbbbbbbbbbbbbbb"
+  0x00
+_$text3:
+  str "ccccccccccccccccc"
+ 0x00
+
+Getscancode idea by Casio2009
+
+========================================================================================================================================
+
+Getscancode guide
+Format từng key
+_$key_n:
+  er0 = 0xd730
+  getscancode
+  setlr
+
+  er2 = 0xd730    -> Địa chỉ nhảy CMP (Đặt đâu cũng được nhưng không được trong program hay backup,...)
+
+  er0 = [er2],r2 = 9,rt
+
+  er2 = 0x0101        -> Đây là KI;KO,tìm được ở D150 (vd 0101 là nút 1)
+
+  er0 - er2_eq,r0 = 1,rt
+  0x3032ac30
+
+  er4 = adr_of [-2] _$key_n+1.       -> Địa chỉ setup key tiếp theo -2
+
+  er2 = 0x0038        -> Độ dài của setupkey (Không quan trọng lắm vì thường độ dài là 38, đến other_key <tức những key không setup> thì chỉnh về 0a thôi.Lý do tý nói)
+
+  er0*=r2, er2 = er0, er0+=er4, rt
+  er14 = er0, pop xr0
+  0x30303030
+  sp = er14, pop er14
+
+Thứ tự trong program
+
+_$key_1
+
+_$key_2
+
+_$key_1_func
+
+_$key_3
+
+_$key_2_func
+
+...
+_$key_n
+_$key_n-1_func
+...
+
+_$lastkey (Chỉnh cái độ dài func của key tiếp theo về 0a,chỉnh er4 = adr_of [-2] _$key_2 là er4 = adr_of [-2] _$otherkey)
+
+_$key_n-1_func (Tức là chức năng của key trc)
+
+_$otherkey_func   -> Cái này thường để như sau:
+pop er14
+adr_of _$backup -2
+sp = er14 , pop er14
+
+_$lastkey_func
+
+_$backup
+
+
+_$key_n là setup key đó
+_$key_n_func là chức năng key đó
+
+========================================================================================================================================
+
+SET SP NHƯ NÀO
+- Xoay quanh các set sp sau
+2702e    sp = er14,pop er14,rt
+12da6    sp = er14,pop qr8
+23f82    sp = er14,pop qr8,pop qr0
+20d60    sp = er14,pop er14
+21f74    sp = er6,pop er8
+09820    sp = er14,pop xr12
+13aac    sp = er14,pop qr8,pop er6
+
+Ví dụ
+sp = er14,pop er14 thì địa chỉ set sp nằm ở er14, do có pop er14 ở sau nên cần trừ 2 byte ở địa chỉ set sp (Như E9E0 -> E9DE) (ERn = 2 byte)
+còn sp = er14,pop xr12 thì set địa chỉ set sp ở er14, do có pop xr12 ở sau nên cần trừ 4 byte ở địa chỉ set sp (XRn = 4 byte)
+Tác dụng:
+- Kích hoạt các gadget (hay nói luôn là program) trong vùng được set sp
+Nhược điểm:
+- Biến vùng set sp thành stack (a.k.a bị phá) nên mới cần các phương pháp loop trên
+
+========================================================================================================================================
+
+CÁC DRAW_FUNC MÀ MỌI NGƯỜI NÊN BIẾT (KHÔNG THÌ THÔI)
+- Pixel_draw (091FC): r0 = x position, r1 = y position,  r2 = color (00 = Black, 01 = White), r3 = byte pad (Không để làm gì)
+Tác dụng : In một pixel lên vị trí x và vị trí y tuỳ theo màu
+
+- Line_draw (28AC2 hoặc 08E64): r0 = x start position, r1 = y start position, r2 = x end position, r3 = y end position
+Tác dụng : In pixel dưới dạng thanh (Nối vị trí của x start đến vị trí x end và y cũng thế)(khó giải thích quá)
+
+- Render_bitmap (09846): r0 = x position, r1 = y position, r2 = x size, r3 = y size, er0 (sau label do bị push ig) = Địa chỉ tranh
+Tác dụng: In pixel được inject từ địa chỉ tranh,ngoài ra còn phải dùng memzero ở trước đống này (idk why),chi tiết xem trong
+
+Và tất cả cần thêm render.ddd4 (0947E) ở sau !
+
+========================================================================================================================================
+
+Các vùng địa chỉ (CWI only & Rewritten Ver 🐧)
+Vùng 1: E9D4 → EDCF…
+Thường thì đa số Program đặt điểm bắt đầu inject là: E9E0
+• Đặc điểm:
+  ︎-︎ Đây là vùng có thể được coi là an toàn
+  ︎-︎ Là nơi mặc định thường chứa hầu hết các Program dài/ngắn khác nhau, chủ yếu là Backup Program (có thể bao gồm cả Launcher, Seed, v.v… nếu độ dài chưa chạm đến ngưỡng an toàn)
+• Lưu ý:
+  ︎-︎ Vùng này sẽ không còn an toàn nữa nếu:
+    1/ Tháo lắp pin (đương nhiên rồi :v)
+    2/ Chạy các dạng ma trận (bao gồm softbrick và hardbrick)
+    3/ Sử dụng các kí tự có thể stack được trong chế độ MathI/O (thường là các kí tự có chứa '(' hoặc '□')
+       VD: '(' ; 'sin(' ; '√(' trong MathI/O ; v.v…
+    4/ Một số phép tính ra kết quả dài (thường gặp ở phép chia), thường dễ bị ảnh hưởng đối với một số Program có độ dài (gần) chạm đến ngưỡng an toàn
+       VD: 3.1415926536…, v.v…
+    5/ Chuyển đổi dạng kết quả bằng nút [S⇔D] sau khi tính
+       VD: 1.₍3₎ (a.k.a 1.333333333…), 1⌟3, v.v…
+
+Vùng 2: D5F8 → DBCF
+• Đặc điểm:
+  ︎-︎ Một vùng 'rộng lớn' mà có thể được coi là ổn định
+  ︎-︎ Các Program dùng để chạy (copy từ Backup Program qua) thường sẽ được đặt ở đây
+  ︎-︎ Có thể được dùng cho việc inject văn bản dài/ngắn khác nhau (miễn là độ dài văn bản *không được chạm* tới vùng 'memory_integrity' dẫn đến máy tính bị Factory Reset → Clear vùng này)
+• Lưu ý:
+  ︎-︎ Vùng này sẽ không còn an toàn nữa nếu:
+    × 1/ ; 2/
+    × Chuyển mode bất kỳ bằng nút [MENU]
+    × Reset bằng [Shift]; [9], hoặc bị Factory Reset (bao gồm 'memory_integrity' bị 'ô nhiễm')
+
+Vùng 3: DBE8 → DDCF
+• Đặc điểm:
+  ︎-︎ Một vùng khá rộng và có thể được coi là ổn định
+  ︎-︎ Một lựa chọn cho các Program ngắn có thể inject trực tiếp (chẳng hạn như: Quickcpy/++/Max/Max Fix/…)
+• Lưu ý:
+  ︎-︎ Vùng này sẽ không còn an toàn nữa nếu:
+    × 1/ ; 2/ ; 3/
+
+Vùng 4: E3D4 → E9D3
+• Đặc điểm: Lựa chọn có thể thay thế cho Vùng 2
+• Lưu ý: Vùng này thật sự không an toàn
+Do đây là vùng 'screen_buffer2', hay bị ghi đè bởi các màn hình như: [MENU], [Shift]; [7], v.v… & bị clear sau khi nhấn [AC] hoặc [ON]
+
+Vùng 5: D248 → D30F
+• Đặc điểm:
+  ︎-︎ Đây là một vùng hiếm (cụ thể là: hiếm ai dùng đến 🐧)
+  ︎-︎ Các Launcher dùng để chạy (copy từ Launcher gốc thông qua Backup Program, rồi sau đó chạy → tạo thành loop) có thể được đặt tại đây
+Du khong duoc khuyen nghi :s
+• Lưu ý: Đây là vùng không an toàn (chắc chắn rồi :>)
+
+========================================================================================================================================
+
+CÁCH DÙNG CONVERT_KEY (HẦU NHƯ CHỈ DÙNG ĐỂ LÀM MỘT SỐ FUNC THIÊN VỀ VALUE NHƯNG RẤT NGẮN
+Ta có công thức tổng quát như sau:
+
+setup_cvtkey
+loop
+key_map
+
+Công thức chi tiết:
+
+setup_cvtkey:
+    er0 = 0xd720
+    getscancode    # Hoặc getscancode_nodelay cũng được
+    xr0 = 0x7b0ed720
+    setlr
+    cvt_key
+    er8 = 0x001c
+    r0-=r8,pop er8,rt
+    0x3030
+    r1 = 0,rt
+    er2 = adr_of key_map    # Địa chỉ key_map
+    er0+=er0,er2+=er0,er0=[er2]
+    er2 = er0,er0+=er4,rt
+    er8 = adr_of any    # Địa chỉ muốn cộng trừ value
+    r0 = 0,[er8]+=er2,pop xr8
+    0x30303030
+loop:
+    xr0 = 0xd184d630
+    BL strcpy
+    er14 = 0xd62e
+    sp = er14,pop er14
+key_map:
+    2 byte đầu là value muốn cộng trừ cho địa chỉ mình muốn nếu bấm phím lên
+    2 byte tiếp theo là value muốn cộng trừ cho địa chỉ mình muốn nếu bấm phím xuống
+    2 byte tiếp theo là value muốn cộng trừ cho địa chỉ mình muốn nếu bấm phím phải
+    2 byte tiếp theo là value muốn cộng trừ cho địa chỉ mình muốn nếu bấm phím trái
+    ... (Còn lại tự mò hoặc hỏi Quý mão :>)
+
+========================================================================================================================================
+
+CÁCH MÀ CMP BEQ CỦA KEY HOẠT ĐỘNG
+
+setup_key:
+  er0 = 0xd730 -> Địa chỉ nhảy keycode
+  getscancode
+  setlr
+  er2 = 0xd730  -> Địa chỉ nhảy keycode (Đặt đâu cũng được nhưng không được trong program hay backup,...)
+Ví dụ nếu bấm một thì địa chỉ này sẽ nhảy sang 01 01,bấm hai là 01 02
+  er0 = [er2],r2 = 9,rt 
+  Đưa giá trị của địa chỉ d730 về er0
+  er2 = 0x0101        -> Đây là KI;KO, tìm được ở D150 (vd 01 01 là nút 1)
+  er0 - er2_eq,r0 = 1,rt
+-> Nếu er0 khác er2,r0 = 00 (Đồng nghĩa với key được bấm khác key được set ở er2), nếu er0 = er2,r0 = 01 (Đồng nghĩa với key được bấm giống key được set ở er2)
+  0x3032ac30
+  Đưa r1 về 00
+  er4 = adr_of [-2] setup_key tiếp theo.       -> Địa chỉ setup key tiếp theo -2 do set sp
+  er2 = 0x0038     -> Độ dài của setupkey tiếp theo (đã đổi ra hex)
+  er0*=r2, er2 = er0, er0+=er4, rt
+  Lấy er0 nhân cho r2 và lưu kết quả ở er0,lấy er0 + er4 lưu kết quả ở er0
+  Nếu key bấm không khớp với key được set: er4 sẽ được không được cộng (er0 = 0 nhân 2 = 0 do er0 = 0 từ CMP BEQ)
+  Nếu key bấm khớp với key đã set: er4 được +38 (er0 = 1 nhân 38 = 38 đó er0 = 1 từ CMP BEQ)
+  er14 = er0, pop xr0
+  Đưa er14 bằng giá trị ở er0 để set sp ở er14
+  Nếu key bấm khớp với key đã set thì sẽ nhảy qua key_func luôn (do địa chỉ setup_key tiếp theo cộng cho 38)
+  Nếu không khớp với key đã set thì sẽ nhảy qua setup_key tiếp theo (do địa chỉ setup_key tiếp theo không được cộng a.k.a cộng cho 0) và sẽ tiếp tục được CMP và check ở setup_key đó
+  0x30303030 # pad xr0
+  sp = er14, pop er14
+
+Ở setup_key cuối cùng,er4 thay vì bằng setup_key thì nó sẽ là otherkey_func, độ dài của setup_key đổi thành 0a (do er14 = adr_of [-2] loop và set sp dài 10 byte đổi ra hex là 0a).
+Nếu key được bấm vẫn khác các giá trị key được setup trong setup_key thì nó sẽ nhảy qua và chạy otherkey_func và quay lại nhờ loop
+Nếu key được bấm đã khớp với giá trị key ở setup_key cuối cùng thì nó sẽ nhảy qua và chạy key_func cuối cùng do đã cộng 0a để không phải chạy otherkey_func
+Mà chạy key_func cuối cùng và loop.
+
+========================================================================================================================================
+
+HOW TO USE CMP_BEQ
+er2 = Địa chỉ của giá trị muốn so sánh
+er0 = [er2],r2 = 9,rt (Đưa giá trị từ er2 về er0)
+er2 = Giá trị muốn so sánh với er0
+er0 - er2_eq,r0 = 1,rt (So sánh er0 với er2, nếu er0 ≠ er2 thì r0 = 0,er0 = er2 thì r0 = 1)
+r1 = 0,rt (Đưa r1 về 0)
+er4 = Địa chỉ program chạy khi er0 ≠ er2
+er2 = Độ dài của program chạy khi er0 ≠ er2
+er0*=er2,er2=er0,er0+=er4
+(Nếu r0 = 0 thì chạy program khi er0 ≠ er2 do 0*r2 [r2=length] = 0,er4+er0 = Địa chỉ program chạy khi er0 ≠ er2 + 0 = Địa chỉ program chạy khi er0 ≠ er2,Nếu r0 = 1 thì sẽ chạy địa chỉ program chạy khi er0 ≠ er2 + độ dài được lưu trong er4)
+er14 = er0,pop xr0 (Lưu địa chỉ đã setup ở er0 sang er14)
+0x30303030
+sp = er14,pop er14
+
+Mỗi tội khi một trong hai giá trị ở er0 hoặc er2 = 40-5F thì sẽ chạy luôn địa chỉ trong trường hợp er0 = er2 (Dù er0 ≠ er2)
+
+========================================================================================================================================
+
+COMPARE
+CMP xRn, xRn hoặc [xRn] hoặc ADDR(nếu có)
+
+sẽ so sánh giá trị của xRn với xRn bằng cách trừ xRn thứ nhất với xRn thứ 2
+nếu kết quả = 0 thì sẽ set Zero flag (z)
+= âm hoặc dương thì sẽ set sign flag (n)
+ko mượn từ carry flag (c) thì sẽ set
+kết quả sẽ ko đưa vào xRn
+
+CMPC xRn, xRn hoặc [xRn] hoặc ADDR(nếu có)
+
+Giống cmp BUT có carry flag(c) vào chơi
+xRn - xRn - c
+Nếu c là 1 trc cmpc, thì sẽ bỏ qua nếu kết quả ko âm, sau đó, c sẽ đặt thành 1 nếu ko âm và 0 nếu có âm
+Nếu là 0 trc cmpc, thì sẽ trừ đi 1, sau đó, c sẽ đặt thành 1 nếu ko âm và giữ nguyên 0 nếu âm
+Các lệnh điều kiện dành cho CMP, SUB, CMPC,...
+
+BEQ: Nhảy nếu bằng nhau (Zero flag = 1).
+BNE: Nhảy nếu không bằng nhau (Zero flag = 0).
+BGT: Nhảy nếu lớn hơn (Negative flag = 0 và Zero flag = 0).
+BLT: Nhảy nếu nhỏ hơn (Negative flag = 1).
+BGE: Nhảy nếu lớn hơn hoặc bằng (Negative flag = 0).
+BLE: Nhảy nếu nhỏ hơn hoặc bằng (Zero flag = 1 hoặc Negative flag = 1).
+BVS: Nhảy nếu tràn số (Overflow flag = 1).
+BVC: Nhảy nếu không tràn số (Overflow flag = 0).
+
+========================================================================================================================================
+
+• Chương 1: Define Keycode (tui tự đặt :v)
+Tui sẽ lấy Text Editor [Hexd Keybase] để làm template & minh hoạ cho các ví dụ bên dưới
+Phần này dùng để xác định vị trí mà keycode sẽ được đặt bla bla, nhưng trông sẽ __không__ giống so với mấy format thông thường khác :v
+
+a8 9f 00 00                                          ; set lr & di,rt
+5c a0 00 00
+
+a6 a8 00 00 xx xx                                    ; pop er8
+er8 = word_scr (địa chỉ đặt keycode từng phím, đầu ra giống như tại D150, phải đặt khớp với địa chỉ tại nơi [xx xx])
+
+42 07 11 11 yy yy                                    ; pop er14
+er14 = Không rõ nó là gì, nhưng phải đặt khớp với địa chỉ tại nơi [yy yy]
+
+f0 f5 22 00 [yy yy] 00 00 [xx xx] 00 00 00 00 00 00  ; define_hovered_key (a.k.a getscancode_nodelay) nhưng có B LEAVE :v
+er4 = [xx xx]: Đầu ra của keycode sau khi nhấn một phím xác định (mặc định là để là null byte)
+er8 = [yy yy]: Tui không rõ đầu ra của cái này là gì? (mặc định là để là null byte)
+
+34 7b 11 11 xx xx da 83                              ; pop xr0
+er0 = word_scr (địa chỉ đặt keycode từng phím, đầu ra giống như tại D150)
+er2 = word_map (sơ đồ key, nhưng lần này là tại 83DA thay vì 7B0E, tui nghĩ đó là keymap của base-n (a.k.a radix) mode ig)
+
+========================================================================================================================================
+
+• Chương 2: Setup Key (cũng là tui tự đặt :v)
+Phần này rất quan trọng & phức tạp nhất, vì nó sẽ xác định cách mà "hai phím tạo thành 1 byte" (VD: [5];[6] sẽ nhập tại địa chỉ mục tiêu là byte 56 bla bla), xác định sơ đồ phím từ [0]→[9] ; [(-)] → [tan] (a.k.a 𝗔 → 𝗙), v.v…
+
+a8 9f 00 00                           ; set lr & di,rt
+5c a0 00 00
+
+92 98 22 22                           ; convert_keycode
+
+70 61 11 11                           ; er8 = er0
+Đưa giá trị er0 vào er8
+
+74 89 11 11 2f 00                     ; er2 = ??? (tui không biết vì sao nó lại là byte 2f, vốn là byte 'lẻ'? 🤔)
+90 c7 00 00                           ; er0 - er2_gt,r0 = 0 | r0 = 1,rt
+So sánh er0 với 2f, nếu er0 > 2f thì r0 = 0 và ngược lại
+
+74 89 11 11 10 00                     ; er2 = ??? (cũng không biết nó là gì?, nên giữ nguyên để tránh bị lỗi Program)
+d4 4b 11 11                           ; er0*=r2,er2 = er0,er0+=er4,rt
+er0 lúc này sẽ được × với byte 10, sau đó lưu cho er2 rồi được cộng bởi er4 bla bla…
+
+74 89 11 11 2f 00                     ; er2 = ??? (giống như cái trên, có lẽ là cộng cho `E57C` ig)
+a6 50 22 22 7c e5                     ; er4 = địa chỉ để nhảy đến $1
+d4 4b 11 11                           ; er0*=r2,er2 = er0,er0+=er4,rt (giống như cái ở trên)
+er0 lúc này sẽ được × với byte 10, sau đó lưu cho er2 rồi được cộng bởi er4 bla bla…
+
+08 40 22 22 22 22 22 22 22 22 22 22   ; er6 = er0,er0 = er8,pop qr8
+Lúc này giá trị er6 sẽ là er0, nhưng giá trị er0 sẽ được đặt như giá trị er8 (khá rối rắm) rồi pop qr8
+
+74 1f 22 22                           ; sp = er6,pop er8
+stack_pointer sẽ nhảy từ er6 (vì được set từ er0)
+1 là tới E57C, 2 là tới E57C +… 2F (ig)?
+
+$1:
+70 61 11 11                           ; er8 = er0
+Đưa giá trị er0 vào er8
+
+74 89 11 11 40 00                     ; er2 = 4x
+Có lẽ được dùng để 'hiệu chỉnh' base-n keymap
+
+a8 c7 00 00                           ; er2 - er0_gt,r0 = 0 | r0 = 1,rt
+So sánh er2 với er0 (không biết giá trị lúc này nó như thế nào?), nếu er2 > er0 thì r0 = 0 và ngược lại
+
+74 89 11 11 a6 00                     ; er2 = địa chỉ để nhảy đến $6 (dạng 'rẽ nhánh' của mấy phím khác ig, nằm ở Chương 3)
+a6 50 22 22 ac e5                     ; er4 = địa chỉ để nhảy đến $2
+d4 4b 11 11                           ; er0*=r2,er2 = er0,er0+=er4,rt
+er0 lúc này sẽ được × với byte a6, sau đó lưu cho er2 rồi được cộng bởi er4 bla bla…
+(mà theo tui nghĩ đó là A6 được cộng cho E5AC nếu bị 'rẽ nhánh' bởi thứ gì đó ig)
+
+08 40 22 22 22 22 22 22 22 22 22 22   ; er6 = er0,er0 = er8,pop qr8
+Đưa giá trị er0 vào er6 (để chuẩn bị nhảy), sau đó giá trị er0 sẽ được 'set' giá trị như er8 rồi pop qr8
+
+74 1f 22 22                           ; sp = er6,pop er8
+stack_pointer sẽ nhảy từ er6 (vì được set từ er0)
+1 là tới E5AC, 2 là tới E5AC + A6
+
+$2:
+9c e8                        ; 2 byte đầu này chính là er8
+Cụ thể là được đặt tại địa chỉ E89C
+Ở tại địa chỉ E89C, nếu là '01 00', nghĩa là nibble đầu (a.k.a "một nửa của 1 byte") được nhập. Nếu là '00 00', nghĩa là nibble kế tiếp (a.k.a "một nửa của 1 byte còn lại") được nhập & sẽ tạo thành 1 byte hoàn chỉnh để lưu vào địa chỉ mục tiêu
+ 
+74 89 11 11 00 00            ; er2 mặc định là null byte (có lẽ là dùng để 'ổn định trước'? 🤔)
+
+a0 9c 00 00 9e e8 0f 00
+er8 = E89C sẽ được 'cộng' & set giá trị mặc định thành [00 00]
+er8 sau gadget này đó là địa chỉ [E89E] để đặt từng giá trị 'nibble đầu ra' sau khi nhấn một phím chỉ định (không biết tui giải thích sao cho đúng :v) ig
+VD: [4];[2] → 04 02 → 42, bla bla…
+Không biết thực sự er10 này dùng để làm gì? (có thể là set range của nibble được nhấn, a.k.a 00, 01, 02… → 0F ig)
+
+ae 1b 22 22 
+cc 61 11 11                  ; Phần này tui cũng không biết nó là gì? (có thể là dùng để convert ig)
+16 39 11 11 
+
+d6 4b 11 11                  ; er2 = er0,er0+=er4,rt
+Giá trị er2 sẽ giống như er0 & chính er0 sẽ được cộng bởi er4
+
+52 0b 22 22 00 00 00 00      ; er0 = er10,pop xr8
+Giá trị er0 sẽ giống như er10, rồi pop xr8
+
+d2 03 22 22                  ; [er0]=r2
+Lưu giá trị r2 vào địa chỉ er0 (không biết cả hai cụ thể nó trông như thế nào? :v)
+
+$3:
+74 89 11 11 9e e8 
+er2 là địa chỉ [E89E], dùng để làm mục tiêu để đặt từng giá trị 'nibble đầu ra' sau khi nhấn một phím chỉ định (ig)
+
+90 c7 00 00                         ; er0 - er2_gt,r0 = 0 | r0 = 1,rt
+So sánh địa chỉ er0 (không rõ nó là gì) với địa chỉ E89E, nếu er0 > E89E thì r0 = 0 và ngược lại
+
+74 89 11 11 38 00                   ; er2 = địa chỉ để nhảy đến $5 ('rẽ nhánh' khi nibble đầu được nhập ig)
+a6 50 22 22 02 e6                   ; er4 = địa chỉ để nhảy đến $4
+
+d4 4b 11 11                         ; er0*=r2,er2 = er0,er0+=er4,rt
+er0 lúc này sẽ được × với byte 38, sau đó lưu cho er2 rồi được cộng bởi er4…
+
+08 40 22 22 22 22 22 22 22 22 22 22 ; er6 = er0,er0 = er8,pop qr8
+Đưa giá trị er0 vào er6 (để chuẩn bị nhảy), sau đó giá trị er0 sẽ được 'set' thành giá trị như er8 rồi pop qr8
+
+74 1f 22 22                         ; sp = er6,pop er8
+stack_pointer sẽ nhảy từ er6 (giá trị được set từ er0)
+1 là tới E602, 2 là tới E602 + 38
+
+$4:
+a2 ed                          ; er8 là địa chỉ mục tiêu để đặt Một Địa Chỉ Khác (dùng để lưu byte sau khi hoàn thành nhập 1 byte output). Sau đó, Địa Chỉ Khác này sẽ được cộng khi di chuyển (bằng phím điều hướng chẳng hạn) ig
+
+74 89 11 11 00 00              ; er2 mặc định là null byte (có lẽ là dùng để 'ổn định trước'? 🤔)
+
+a0 9c 00 00 2e e6 00 00
+er8 = EDA2 sẽ được 'cộng' & set giá trị mặc định? (ig)
+er10 khả năng cao là padding
+
+a4 9c 00 00 00 00 02 00        ; ???
+Lưu giá trị [00 00] (a.k.a er2) vào er8 (không biết giá trị lúc này như thế nào) ig
+
+b0 3a 11 11 01 00              ; er6 = 01 00
+Vẫn chưa hiểu rõ công dụng của er6 này dùng để làm gì? (có lẽ là công tắc? 🤔)
+
+80 0e 11 11 9e e8 00 00 d8 e7  ; pop ea, bla bla…
+ea lúc này là địa chỉ [E89E], nếu thấy quen quen thì đó chính là địa chỉ dùng để làm mục tiêu để đặt từng giá trị 'nibble đầu ra' (a.k.a 01 04 khi nhấn [1];[4] chẳng hạn) sau khi nhấn một phím chỉ định (ig)
+er4 khả năng cao là padding
+Còn er6 nó là địa chỉ để nhảy đến sau khi hoàn thành nhập 1 byte (có thể tùy chỉnh để làm Hexd tăng 1 địa chỉ sau khi nhập 1 byte xong chẳng hạn)
+
+36 16 22 22 00 00              ; er12 = địa chỉ đích để lưu sau khi hoàn thành nhập 1 byte
+VD: Nếu er12 'xuất hiện' là D678 chẳng hạn, khi nhấn [4];[6] → 04 06 → 46. Và byte 46 này sẽ lưu vào địa chỉ D678 (ig)
+
+bc 6e 11 11 00 00              ; lấy giá trị r0 từ [EA+], sau đó là bla bla (idk 🐧)
+Btw, er12 có khả năng đó là padding
+
+74 1f 22 22                    ; sp = er6,pop er8
+stack_pointer sẽ nhảy từ er6 (không biết giá trị lúc này được lấy từ đâu? 🙃)
+
+$5:
+9c e8
+74 89 11 11 01 00 
+a0 9c 00 00 00 00 00 00        ; dùng để set E89C thành 01 khi nhập 'một nửa của 1 byte' (a.k.a nibble đầu), sau đó nhảy đến đoạn cuối của loop (a.k.a $y, tại chương 4)
+b0 3a 11 11 5c e8
+74 1f 22 22
+
+========================================================================================================================================
+
+• Chương 3: Custom Key (cũng là do tui tự đặt :v)
+Phần này chủ yếu là đặt một số key cụ thể để add thêm một "tính năng" chẳng hạn (như di chuyển con trỏ, tăng hoặc giảm giá trị)
+'Sơ đồ' này trông __khá__ giống như *CMP_BEQ key truyền thống* nếu ông để ý kỹ 🐜
+Btw, ở Program Clock [Chỉnh Giờ] thay vào đó sẽ sử dụng 'sơ đồ' tựa như `EA Switch`, nhưng hiện tại tui __không biết__ cơ chế này (do tui lười :p, mặc dù nó trông cũng gọn hơn + 'convert_keycode' sẽ trông khác hơn một chút)
+
+$6:
+70 61 11 11                         ; er8 = er0
+Đưa giá trị er0 vào er8
+
+a8 9f 00 00                         ; set lr & di,rt
+5c a0 00 00 
+
+74 89 11 11 60 00                   ; er2 chính là nút [(] (lấy từ đầu ra của convert_keycode ig)
+e6 9a 00 00                         ; er0 - er2_eq,r0 = 1,rt
+So sánh er0 (phím được chỉ định được nhấn) và er2 (nút [(]). Nếu khớp, r0 = 1 và ngược lại
+
+74 89 11 11 30 00                   ; địa chỉ để nhảy đến $8 (nếu nhấn [(])
+a6 50 22 22 88 e6                   ; địa chỉ để nhảy đến $7, a.k.a phím tiếp theo (nếu phím [(] không được nhấn)
+
+d4 4b 11 11                         ; er0*=r2,er2 = er0,er0+=er4,rt
+er0 lúc này sẽ được × với byte 30, sau đó lưu cho er2 rồi được cộng bởi er4 (a.k.a E688 không cộng khi không nhấn bất kỳ phím nào trừ [(]. Khi [(] được nhấn, địa chỉ này sẽ + 30 và sau đó nhảy luôn)
+
+08 40 22 22 22 22 22 22 22 22 22 22 ; er6 = er0,er0 = er8,pop qr8
+Đưa giá trị er0 vào er6 (để chuẩn bị nhảy), sau đó giá trị er0 sẽ được 'set' thành giá trị như er8 rồi pop qr8
+
+74 1f 22 22                         ; sp = er6,pop er8
+stack_pointer sẽ nhảy từ er6 (giá trị được set từ er0)
+1 là tới E688, 2 là tới E688 + 30
+
+$7:
+70 61 11 11                         ; er8 = er0
+Đưa giá trị er0 vào er8
+
+74 89 11 11 d0 00                   ; er2 chính là nút [)] (lấy từ đầu ra của convert_keycode ig)
+e6 9a 00 00                         ; er0 - er2_eq,r0 = 1,rt
+So sánh er0 (phím được chỉ định được nhấn) và er2 (nút [)]). Nếu khớp, r0 = 1 và ngược lại
+
+74 89 11 11 30 00                   ; địa chỉ để nhảy đến $10 (nếu nhấn [)])
+a6 50 22 22 d0 e6                   ; địa chỉ để nhảy đến $9, a.k.a phím tiếp theo (nếu phím [)] không được nhấn)
+
+d4 4b 11 11 
+08 40 22 22 22 22 22 22 22 22 22 22 ; giống như cái ở $6
+74 1f 22 22
+
+$8:
+32 f0
+74 89 11 11 ff ff 
+a0 9c 00 00 00 00 00 00             ; độ tương phản -1 & nhảy đến đoạn cuối của loop (a.k.a $y, tại chương 4)
+b0 3a 11 11 2e e8
+74 1f 22 22
+
+$9:
+70 61 11 11 
+74 89 11 11 35 00                   ; giống như $7 nhưng đó là nút [5] (chẳng hạn)
+e6 9a 00 00 
+74 89 11 11 30 00                   ; địa chỉ để nhảy đến $10+2 (nếu nhấn [5])
+a6 50 22 22 18 e7                   ; địa chỉ để nhảy đến $10+1, a.k.a phím tiếp theo (nếu phím [5] không được nhấn)
+d4 4b 11 11 
+08 40 22 22 22 22 22 22 22 22 22 22 
+74 1f 22 22 32 f0
+
+$10:
+32 f0
+74 89 11 11 01 00 
+a0 9c 00 00 00 00 00 00             ; độ tương phản +1
+b0 3a 11 11 14 e8                   ; jump to $x (ví dụ như key cuối cùng được định dạng)
+74 1f 22 22
+………
+
+$x:
+9c e8
+74 89 11 11 00 00                   ; dùng để set E89C thành 00 sau khi hoàn thành nhập 'một nửa của 1 byte còn lại' (a.k.a nibble kế tiếp), sau đó hoặc là nhảy đến đoạn cuối của loop (a.k.a $y, tại chương 4) hoặc là chảy thẳng xuống luôn (maybe :v)
+a4 9c 00 00 00 00 00 00 
+………
+
+========================================================================================================================================
+
+• Chương 4: Loop (phần hóc búa nhất)
+Đây là phần theo tui là khó 'xơi' nhất (kiểu như: muốn mở rộng cũng không được mà muốn rút lại cũng không xong :vvv)
+Phần này **bắt buộc phải có** và __không thể thay thế__ bởi các dạng loop khác (theo những giới hạn mà tui biết được 🤓)
+Phần loop này nó đặc biệt ở chỗ nó vừa loop liên tục ở một vùng (ở trên hoặc ở dưới) vừa 'waitkey' ở vùng khác ig ||(rất là xoắn 🙃👍)||
+
+$y:
+a6 83 11 11 00 05 01 00        ; er8 là tick của delay, còn er10 hiện tại tui vẫn không biết nó được dùng như thế nào? <:
+86 53 11 11                    ; er0 = er8
+Đặt giá trị er0 như er8 để 'chạy' delay
+
+3c 9f 00 00                    ; delay
+
+5c a0 00 00                    ; di,rt (có lẽ được dùng để hủy ngắt, bla bla… :v)
+
+a6 a8 00 00 94 e8
+74 89 11 11 01 00
+a4 9c 00 00 00 00 00 00
+Lưu giá trị er2 vào địa chỉ er8 (cụ thể là 01 vào E894)
+Có lẽ được dùng để 'khôi phục gadget' khi đang loop, ở đoạn này: '32 89 [08 00] 00 00' (vẫn chưa biết tại sao nó lại là [08 00]? .-.)
+
+da 7b 11 11 d0 03 e0 e9 e0 e4 de e4
+32 89 08 00 00 00              ; copy toàn bộ Program từ E9E0 → E4E0 với length là 03D0, sau đó là chạy Program tại E4DE
+74 1f 22 22
+
+[00 00] : nếu là '01 00', nghĩa là nibble đầu (a.k.a "một nửa của 1 byte") được nhập
+          nếu là '00 00', nghĩa là nibble kế tiếp (a.k.a "một nửa của 1 byte còn lại") được nhập & sẽ tạo thành 1 byte hoàn chỉnh để lưu vào địa chỉ mục tiêu
+
+<00 00> : giá trị 'nibble đầu ra' sau khi nhấn một phím chỉ định (ig)
+VD: [4];[2] → 04 02, [E];[A] → 0E 0A, v.v…
+
+00 00 : padding
+
+f8 d5 : địa chỉ mục tiêu mà giá trị (1 byte hoàn chỉnh) tại đó sẽ được lưu vào (hoặc sau đó cũng được cộng lên -nếu có tùy chỉnh-)
+VD: [4];[6] → 04 06 → 46. Và byte 46 này sẽ lưu vào địa chỉ D5F8 chẳng hạn (ig)
+
+========================================================================================================================================
+
+Cách xác định vị trí giá trị sẽ lấy của từng phím nhấn được chỉ định (đối với Program có xài 'convert_keycode')
+Theo những gì tui biết :v
+Một *ví dụ* như thế này chẳng hạn:
+
+34 7b 11 11 92 d7 0e 7b
+a8 9f 00 00
+92 98 22 22
+a6 a8 00 00 1c cc
+5a ac 00 00 00 00
+74 89 11 11 f0 d7
+98 3b 11 11
+d6 4b 11 11
+a6 a8 00 00 02 da
+9e 9c 00 00 00 00 00 00
+…
+
+• Ta sẽ có 'công thức' như sau:
+
+[keycode_converted] - <1c> = [1st result]
+[1st result] + [1st result] = [2nd result]
+[src_value_keymap] + [2nd result] = [address_keycode_position]
++︎ Trong đó:
+
+[keycode_converted]: Keycode sau khi chuyển đổi
+- VD: Khi nhấn phím [6], ban đầu nó là `02 04`, sau khi 'lấy mẫu' & 'chuyển đổi' từ `keymap [7B0E]` nó sẽ là: `00 36` (đảo lại thành `36 00`) [ig]
+- Tương tự, khi nhấn phím [↑], ban đầu nó là `80 04`, sau khi chuyển đổi nó sẽ là: `FC 1C` (đảo lại thành `1C FC`) [ig]
+
+[src_value_keymap]: [D7F0]
+- Địa chỉ bắt đầu đặt 'bảng giá trị' mà tại đó, giá trị cụ thể khi nhấn một phím được chỉ định sẽ được lấy để cộng
+
+[address_keycode_position]: Vị trí giá trị của phím nhấn được chỉ định
+
+<1c>: Từ pop er8
+
+• Ta sẽ thử áp dụng 'công thức' đối với mẫu bên trên như thế này (ví dụ khi nhấn phím [6]):
+
+  36 - 1c = 1a
+ (r0 - r8)
+ (r1 & r9 không bị ảnh hưởng, a.k.a không liên quan :v)
+
+  1a + 1a = 34
+(er0 + er0, nhưng lúc này chỉ cộng r0 do r1 = 0)
+
+  d7f0 + 34 = d824 [khi đảo lại nó như thế này: f0 d7 + 34 00 = 24 d8]
+(er2 + er0, nhưng lúc này chỉ cộng r0 do r1 = 0)
+-︎︎︎ Như vậy, địa chỉ `D824` chính là nơi giá trị tại đó sẽ được lấy để cộng vào 'DA02' khi nhấn phím [6] (và tương tự đối với các phím còn lại) ;>
+
+========================================================================================================================================
+
+cách hoạt động của memcpy
+memcpy:
+    ; Save registers
+    PUSH    ER4
+    PUSH    ER5
+    PUSH    R3
+
+    ; Load parameters (assumed in ER0=dest, ER1=src, ER2=count)
+    LEA     [ER1], EA       ; EA = source address
+    MOV     ER4, ER0        ; ER4 = destination address
+    MOV     ER5, ER2        ; ER5 = byte count
+
+    ; Check if count is zero
+    ADD     ER5, #0         ; Set flags based on ER5
+    BEQ     end             ; Skip loop if count=0
+
+loop:
+    ; Copy byte from source to destination
+    L       R3, [EA+]       ; Load byte from source (EA) and increment
+    ST       R3, [ER4]      ; Store byte to destination (ER4)
+    ADD     ER4, #1         ; Increment destination pointer
+    ADD     ER5, #-1        ; Decrement count
+    BNE     loop            ; Repeat until count=0
+
+end:
+    ; Restore registers
+    POP     R3
+    POP     ER5
+    POP     ER4
+    RT                      ; Return from subroutine
+
+========================================================================================================================================
+
+EA Switch (Setup key ngắn)
+
+    er0 = adr_of [+4] key
+    getscancode_nodelay
+    pop xr12 (adr table adr table)
+    setlr
+    call 17CA6
+    pop er0
+
+key:
+    hex 00 00
+    call 09C20
+    call 1C64A
+    sp = er6, pop er8
+
+key_1_func:
+    [Chức năng key_1,nhớ set sp như CMP_BEQ]
+    key_2_func:
+    [Chức năng key_2]
+    ...
+
+[Loop here]
+table:
+    hex 00 00 00 00 00 00 00 00 00 00
+    Keycode key_1 (xem ở D150)
+    adr_of  [-2] key_1_func
+    Keycode key_2
+    adr_of [-2] key_2_func
+    hex 00 00
+    adr_of [-2] loop
+
+========================================================================================================================================
+
+Cách sử dụng Mode caller (Gọi mode để chạy ROP)
+
+xr0 = 0x00C1D111     # Chọn mode (Ví dụ 02 là Base-N, C1 là phép tính thường,...)
+[er0]=r2
+call 2:36E2
+[ROP]
+
+Khi chạy func 2:36E2, program sẽ đưa về màn hình chính của mode hiện tại (Màn hình của Base-N chẳng hạn).Lúc này,có thể nhập byte vào input area hay variable mà không ảnh hưởng đến tổng thể program.Sau đó bấm [Menu][Mode hiện tại] để chạy ROP.
+Lưu ý:Nếu bấm mode không phải mode được set ban đầu thì máy sẽ tắt và ROP sẽ không chạy
+
+========================================================================================================================================
+
+Convert_key usage:
+Như chúng ta đã biết,khi dùng 'getscancode' thì địa chỉ ở er0 sẽ được lưu dưới dạng này
+
+Key [1] : 01 01
+
+Khi sử dụng convert key:
+
+xr0 = adr_of keycode, 0x83DA   # Địa chỉ keycode chính là cái được set ở er0 với getscancode
+setlr
+cvt_key
+
+Lúc này, key sẽ được convert về một dạng khác.
+
+Key [1] : 01 01
+after convert
+Key [1] : 31 00
+
+Tùy theo keymap [0x7B0E (keytable chung) hoặc 0x83DA (keytable dành cho Base-N)] thì keycode sẽ được convert ra khác nhau
+Cuối cùng, keycode sau khi convert sẽ được lưu ở er0. Lưu ý: là er0 chứ không phải địa chỉ ở er0
+Còn cơ chế hoạt động của convert_key đã được giải thích
+
+cwx keymap
+1     2     3     4     5     6     7     8
+31 00 32 00 33 00 a6 00 a7 00 00 00 30 fc 00 00 
+34 00 35 00 36 00 a8 00 a9 00 00 00 41 00 00 00 
+37 00 38 00 39 00 3e fc 26 fc 00 00 2d 00 00 00 
+2b fc 38 fc 60 00 d0 00 3a fc 2e fc 2e 00 00 00 
+c0 00 36 fc 54 fc 77 00 78 00 79 00 30 00 00 00 
+50 fc 53 fc 55 fc 52 fc 5b fc 75 00 00 00 00 00 
+01 fc 3c fc 1f fc 1d fc 5d fc 48 00 00 00 00 00 
+29 fc 28 fc 1c fc 1e fc 24 fc 00 00 00 00 00 00
+
+alpha: fc28
+shift: fc29
+calc:  fc3c
+sto:   fc2b
+eng:   fc38
+dms:   fc36
+s<>d:  fc3a
+m+:    fc2e
+
+Keytable 0x7B0E
+
+========================================================================================================================================
+
+Cách 'setlr' hợp lý
+1. Viết chương trình bất kì
+2. Đến lúc mình gọi func, đọc func đó xem sau 'BL' nó là gì (nếu func đó có dùng 'BL'). Nếu sau 'BL' không phải 'POP PC' chứng tỏ LR đã point sai
+3. Lúc này sau khi gọi‎ func đó xong, 'setlr' là được rồi thêm mấy gadget end ở 'RT' vô thoải mái.
