@@ -1,0 +1,13 @@
+# HOW TO USE CMP_BEQ 🐧 
+```er2 = Địa chỉ của giá trị muốn so sánh
+er0 = [er2],r2 = 9,rt (Đưa giá trị từ er2 về er0)
+er2 = Giá trị muốn so sánh với er0
+er0 - er2_eq,r0 = 1,rt (So sánh er0 với er2, nếu er0 ≠ er2 thì r0 = 0,er0 = er2 thì r0 = 1)
+r1 = 0,rt (Đưa r1 về 0)
+er4 = Địa chỉ program chạy khi er0 ≠ er2
+er2 = Độ dài của program chạy khi er0 ≠ er2
+er0*=er2,er2=er0,er0+=er4
+(Nếu r0 = 0 thì chạy program khi er0 ≠ er2 do 0*r2 [r2=length] = 0,er4+er0 = Địa chỉ program chạy khi er0 ≠ er2 + 0 = Địa chỉ program chạy khi er0 ≠ er2,Nếu r0 = 1 thì sẽ chạy địa chỉ program chạy khi er0 ≠ er2 + độ dài được lưu trong er4)
+er14 = er0,pop xr0 (Lưu địa chỉ đã setup ở er0 sang er14)
+0x30303030
+sp = er14,pop er14```
